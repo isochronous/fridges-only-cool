@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\common\oni-mod.props" />
+
+  <PropertyGroup>
+    <AssemblyName>NoMagicFridges</AssemblyName>
+    <RootNamespace>NoMagicFridges</RootNamespace>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\common\oni-mod.targets" />
+
+</Project>
