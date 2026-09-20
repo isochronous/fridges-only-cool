@@ -1,4 +1,4 @@
-# Fridges Only Cool
+# No Magic Fridges
 
 An [Oxygen Not Included](https://www.klei.com/games/oxygen-not-included) mod that makes a powered fridge behave like an insulated box with a thermostat: it **only ever cools**, its contents share heat with each other, and food already colder than the 1 °C target is never warmed up to it.
 
@@ -24,11 +24,11 @@ Unpowered fridges, and items taken out of a fridge, behave exactly as in vanilla
 
 As a local mod:
 
-1. Download `FridgesOnlyCool-<version>.zip` from the [latest release](https://github.com/isochronous/fridges-only-cool/releases/latest).
-2. Extract it into a new folder named `FridgesOnlyCool` inside the game's local mods folder, so that `mod.yaml` ends up directly inside it (create `local` if it does not exist):
-   - Windows: `Documents\Klei\OxygenNotIncluded\mods\local\FridgesOnlyCool`
-   - Linux: `~/.config/unity3d/Klei/Oxygen Not Included/mods/local/FridgesOnlyCool`
-   - macOS: `~/Library/Application Support/unity.Klei.Oxygen Not Included/mods/local/FridgesOnlyCool`
+1. Download `NoMagicFridges-<version>.zip` from the [latest release](https://github.com/isochronous/no-magic-fridges/releases/latest).
+2. Extract it into a new folder named `NoMagicFridges` inside the game's local mods folder, so that `mod.yaml` ends up directly inside it (create `local` if it does not exist):
+   - Windows: `Documents\Klei\OxygenNotIncluded\mods\local\NoMagicFridges`
+   - Linux: `~/.config/unity3d/Klei/Oxygen Not Included/mods/local/NoMagicFridges`
+   - macOS: `~/Library/Application Support/unity.Klei.Oxygen Not Included/mods/local/NoMagicFridges`
 3. Start the game, enable the mod under **Mods** in the main menu, and let the game restart.
 
 ## Building
@@ -36,10 +36,10 @@ As a local mod:
 Requires the .NET SDK (8+). Shared build configuration lives in the [oni-mods-common](https://github.com/isochronous/oni-mods-common) submodule, so clone with `--recurse-submodules` (or run `git submodule update --init`). The game DLLs are referenced directly from the game install; override the path if yours differs:
 
 ```
-dotnet build src/FridgesOnlyCool -c Release -p:GameFolder="<path-to>\OxygenNotIncluded"
+dotnet build src/NoMagicFridges -c Release -p:GameFolder="<path-to>\OxygenNotIncluded"
 ```
 
-A successful build deploys the mod to `Documents\Klei\OxygenNotIncluded\mods\local\FridgesOnlyCool` (disable with `-p:ModDeployFolder=none`). Harmony only, no PLib.
+A successful build deploys the mod to `Documents\Klei\OxygenNotIncluded\mods\local\NoMagicFridges` (disable with `-p:ModDeployFolder=none`). Harmony only, no PLib.
 
 ## Implementation notes
 

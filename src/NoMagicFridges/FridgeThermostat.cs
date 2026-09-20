@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 
-namespace FridgesOnlyCool
+namespace NoMagicFridges
 {
 	/// <summary>
 	/// Thermal model of a powered fridge. Vanilla attaches a simulated 1 °C reservoir to every
