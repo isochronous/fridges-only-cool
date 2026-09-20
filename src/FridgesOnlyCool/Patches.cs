@@ -2,7 +2,7 @@ using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
 
-namespace NoMagicFridges
+namespace FridgesOnlyCool
 {
 	public static class Patches
 	{
@@ -54,7 +54,7 @@ namespace NoMagicFridges
 					complete.AddOrGet<FridgeThermostat>();
 					count++;
 				}
-				Debug.Log("[NoMagicFridges] Thermostat added to " + count + " fridge building(s)");
+				Debug.Log("[FridgesOnlyCool] Thermostat added to " + count + " fridge building(s)");
 			}
 		}
 	}

@@ -3,8 +3,8 @@
   <Import Project="$(MSBuildThisFileDirectory)..\..\common\oni-mod.props" />
 
   <PropertyGroup>
-    <AssemblyName>NoMagicFridges</AssemblyName>
-    <RootNamespace>NoMagicFridges</RootNamespace>
+    <AssemblyName>FridgesOnlyCool</AssemblyName>
+    <RootNamespace>FridgesOnlyCool</RootNamespace>
     <Version>0.1.0</Version>
   </PropertyGroup>
 

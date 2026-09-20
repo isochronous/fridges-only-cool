@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 
-namespace NoMagicFridges
+namespace FridgesOnlyCool
 {
 	/// <summary>
 	/// Per-item thermal policy for a powered fridge. Vanilla attaches a simulated 1 °C

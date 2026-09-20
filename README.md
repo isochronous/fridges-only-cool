@@ -1,4 +1,4 @@
-# No Magic Fridges
+# Fridges Only Cool
 
 An [Oxygen Not Included](https://www.klei.com/games/oxygen-not-included) mod that makes a powered fridge **only ever cool** its contents. Food already colder than the fridge's 1 °C target is insulated from the room instead of being warmed up to it.
 
@@ -23,10 +23,10 @@ Once a second the fridge re-checks its contents and moves items between the two 
 Requires the .NET SDK (8+). Shared build configuration lives in the [oni-mods-common](https://github.com/isochronous/oni-mods-common) submodule, so clone with `--recurse-submodules` (or run `git submodule update --init`). The game DLLs are referenced directly from the game install; override the path if yours differs:
 
 ```
-dotnet build src/NoMagicFridges -c Release -p:GameFolder="<path-to>\OxygenNotIncluded"
+dotnet build src/FridgesOnlyCool -c Release -p:GameFolder="<path-to>\OxygenNotIncluded"
 ```
 
-A successful build deploys the mod to `Documents\Klei\OxygenNotIncluded\mods\local\NoMagicFridges` (disable with `-p:ModDeployFolder=none`). Harmony only, no PLib.
+A successful build deploys the mod to `Documents\Klei\OxygenNotIncluded\mods\local\FridgesOnlyCool` (disable with `-p:ModDeployFolder=none`). Harmony only, no PLib.
 
 ## Implementation notes
 
