@@ -1,0 +1,20 @@
+Makes a powered fridge [b]only ever cool[/b] its contents. Food that is already colder than the fridge's 1 °C target is left cold instead of being warmed up to it.
+
+[h2]The problem[/h2]
+A powered Refrigerator does not just stop food from spoiling; it pulls everything inside towards 1 °C, from both directions. If you keep a fridge in a freezer room so the food is deep-frozen, the moment the fridge gets power, even for a few seconds to read its automation signal, your frozen food is dragged back up to 1 °C.
+
+[h2]What the mod does[/h2]
+[list]
+[*]Food warmer than 1 °C is cooled exactly as in the base game.
+[*]Food at or below 1 °C is no longer warmed by the fridge. While the fridge is powered, that food is also insulated from the room the same way an Insulated Tile insulates: heat exchange is slowed to 1/100, not stopped.
+[*]If insulated food eventually warms past 1 °C, the fridge cools it again as normal.
+[*]Unpowered fridges behave exactly as in the base game, and food taken out of a fridge goes straight back to normal heat exchange.
+[*]Power use, the full/not-full signal, and the energy-saver state are unchanged.
+[/list]
+
+Applies to the Refrigerator, the Mini Fridge, and any modded building that reuses the game's fridge controller.
+
+[h2]Compatibility[/h2]
+Works with the base game and all DLCs, on build 744825 (U59) or newer. No dependencies. Nothing is written to your save, so it can be added or removed at any time.
+
+Source and issue tracker: https://github.com/isochronous/fridges-only-cool
