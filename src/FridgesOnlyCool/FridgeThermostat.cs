@@ -7,34 +7,53 @@ using UnityEngine;
 namespace FridgesOnlyCool
 {
 	/// <summary>
-	/// Per-item thermal policy for a powered fridge. Vanilla attaches a simulated 1 °C
-	/// reservoir to every stored item whenever the fridge is active, which also warms
-	/// deep-frozen food up to 1 °C. This component instead keeps each item in one of three
-	/// states while the fridge is active:
+	/// Thermal model of a powered fridge. Vanilla attaches a simulated 1 °C reservoir to every
+	/// stored item, which cools warm food but also warms deep-frozen food up to 1 °C. Here the
+	/// vanilla reservoir is switched off (see Patches) and, once a second, the contents are
+	/// treated as one insulated box with a thermostat:
 	///
-	///   Cooling   - warmer than the target: the vanilla reservoir is attached (unchanged).
-	///   Insulated - at or below the target: no reservoir, and the item's heat exchange with
-	///               the room is scaled down by the same factor an Insulated Tile uses, so it
-	///               still drifts toward room temperature, just very slowly.
-	///   Normal    - fridge unpowered, or item left the fridge: vanilla behaviour.
+	///   - every item exchanges heat with a shared interior temperature, in both directions,
+	///     so frozen stock chills a warm newcomer and is warmed a little in return;
+	///   - while the contents' average is above the setpoint the compressor runs: a fixed
+	///     thermal mass at the setpoint is blended into the interior temperature, pulling it
+	///     down. At or below the setpoint the compressor is off and the contents only equalise
+	///     among themselves, so the fridge itself never heats anything;
+	///   - items at or below the setpoint are insulated from the room the way an Insulated
+	///     Tile is (heat exchange scaled by 0.01, not stopped).
 	///
-	/// Insulation is applied by re-registering the item's sim chunk with a reduced surface
-	/// area and ground-transfer scale. The Harmony prefix in Patches keeps the reservoir off
-	/// insulated items whenever vanilla (re)registers them.
+	/// Unpowered fridges, and items that leave the fridge, are pure vanilla.
 	/// </summary>
 	public sealed class FridgeThermostat : KMonoBehaviour, ISim1000ms
 	{
 		/// <summary>Insulated Tile thermal conductivity relative to its material (InsulationTileConfig).</summary>
 		public const float InsulationFactor = 0.01f;
 
-		private enum ItemState { Normal, Cooling, Insulated }
+		/// <summary>
+		/// Heat capacity of the compressor's share of the interior, kDTU/K: about 25 kg of food
+		/// (3.47 kDTU/kg/K) in a fridge that holds 100 kg. Larger cools a full warm fridge faster.
+		/// </summary>
+		public const float BaseHeatCapacity = 25f * 3.47f;
+
+		/// <summary>Insulate at or below setpoint + this; release above setpoint + ReleaseBand.</summary>
+		private const float InsulateBand = 0.1f;
+		private const float ReleaseBand = 0.6f;
+
+		/// <summary>Temperature changes smaller than this are not worth a sim message.</summary>
+		private const float MinimumStep = 0.0005f;
 
 		private sealed class Tracked
 		{
-			public ItemState state;
-			public bool originalsSaved;
+			public bool insulated;
 			public float surfaceArea;
 			public float groundTransferScale;
+		}
+
+		private struct Sample
+		{
+			public PrimaryElement element;
+			public float temperature;
+			public float heatCapacity;
+			public float fraction;
 		}
 
 		private static readonly Action<SimTemperatureTransfer> SimRegister = AccessTools.MethodDelegate<Action<SimTemperatureTransfer>>(AccessTools.Method(typeof(SimTemperatureTransfer), "SimRegister"));
@@ -47,15 +66,10 @@ namespace FridgesOnlyCool
 		private readonly Dictionary<int, Tracked> items = new Dictionary<int, Tracked>();
 		private readonly HashSet<int> seen = new HashSet<int>();
 		private readonly List<int> stale = new List<int>();
+		private readonly List<Sample> samples = new List<Sample>();
 
 		private static readonly EventSystem.IntraObjectHandler<FridgeThermostat> OnStorageChangeDelegate =
 			new EventSystem.IntraObjectHandler<FridgeThermostat>((component, data) => component.OnStorageChange(data));
-
-		/// <summary>True when the item is warm enough to want the fridge's reservoir.</summary>
-		public static bool WantsCooling(PrimaryElement element, float target)
-		{
-			return element != null && element.Temperature > target;
-		}
 
 		protected override void OnSpawn()
 		{
@@ -69,7 +83,7 @@ namespace FridgesOnlyCool
 			Unsubscribe((int)GameHashes.OnStorageChange, OnStorageChangeDelegate);
 			if (storage != null)
 				foreach (GameObject item in storage.items)
-					if (item != null && items.TryGetValue(item.GetInstanceID(), out Tracked tracked) && tracked.originalsSaved)
+					if (item != null && items.TryGetValue(item.GetInstanceID(), out Tracked tracked))
 						RestoreInsulation(item.GetComponent<SimTemperatureTransfer>(), tracked);
 			items.Clear();
 			base.OnCleanUp();
@@ -80,7 +94,11 @@ namespace FridgesOnlyCool
 			if (def == null || storage == null || operational == null)
 				return;
 			bool active = operational.IsActive;
+			float setpoint = def.simulatedInternalTemperature;
+			// Vanilla's conductivity figure, read as W/K per item: 1000 -> 1 kDTU/s/K.
+			float conductance = def.simulatedThermalConductivity / 1000f;
 			seen.Clear();
+			samples.Clear();
 			foreach (GameObject item in storage.items)
 			{
 				if (item == null)
@@ -95,12 +113,39 @@ namespace FridgesOnlyCool
 				// A chunk mid-registration has no valid handle yet; wait for it.
 				if (!Sim.IsValidHandle(transfer.SimHandle))
 					continue;
-				ItemState wanted = !active ? ItemState.Normal
-					: WantsCooling(item.GetComponent<PrimaryElement>(), def.simulatedInternalTemperature) ? ItemState.Cooling
-					: ItemState.Insulated;
-				if (wanted != tracked.state)
-					Apply(transfer, tracked, wanted);
+				PrimaryElement element = item.GetComponent<PrimaryElement>();
+				if (!active || element == null)
+				{
+					RestoreInsulation(transfer, tracked);
+					continue;
+				}
+				float temperature = element.Temperature;
+				bool insulate = tracked.insulated ? temperature <= setpoint + ReleaseBand : temperature <= setpoint + InsulateBand;
+				if (insulate != tracked.insulated)
+				{
+					if (insulate)
+						Insulate(transfer, tracked);
+					else
+						RestoreInsulation(transfer, tracked);
+					// The chunk is re-registering; it joins the exchange again next second.
+					continue;
+				}
+
+				float heatCapacity = element.Mass * element.Element.specificHeatCapacity;
+				if (heatCapacity <= 0f)
+					continue;
+				samples.Add(new Sample
+				{
+					element = element,
+					temperature = temperature,
+					heatCapacity = heatCapacity,
+					// Share of the gap to the interior temperature this item closes in dt.
+					fraction = 1f - Mathf.Exp(-conductance * dt / heatCapacity)
+				});
 			}
+			if (active && samples.Count > 0)
+				Exchange(setpoint);
+
 			stale.Clear();
 			foreach (int id in items.Keys)
 				if (!seen.Contains(id))
@@ -109,47 +154,57 @@ namespace FridgesOnlyCool
 				items.Remove(id);
 		}
 
-		private void Apply(SimTemperatureTransfer transfer, Tracked tracked, ItemState wanted)
+		/// <summary>Moves every sampled item toward the shared interior temperature.</summary>
+		private void Exchange(float setpoint)
 		{
-			ItemState previous = tracked.state;
-			tracked.state = wanted;
-			switch (wanted)
+			float capacity = 0f, energy = 0f, coupling = 0f, coupledEnergy = 0f;
+			foreach (Sample sample in samples)
 			{
-				case ItemState.Insulated:
-					if (!tracked.originalsSaved)
-					{
-						tracked.surfaceArea = transfer.SurfaceArea;
-						tracked.groundTransferScale = transfer.GroundTransferScale;
-						tracked.originalsSaved = true;
-					}
-					transfer.SurfaceArea = tracked.surfaceArea * InsulationFactor;
-					transfer.GroundTransferScale = tracked.groundTransferScale * InsulationFactor;
-					// Re-registration fires vanilla's OnItemSimRegistered, where the prefix
-					// keeps the reservoir off because the item is at or below the target.
-					Reregister(transfer);
-					break;
-				case ItemState.Cooling:
-					if (previous == ItemState.Insulated)
-						RestoreInsulation(transfer, tracked); // re-registers; the prefix lets vanilla attach the reservoir
-					else
-						SimMessages.ModifyElementChunkTemperatureAdjuster(transfer.SimHandle, def.simulatedInternalTemperature, def.simulatedInternalHeatCapacity, def.simulatedThermalConductivity);
-					break;
-				default:
-					if (previous == ItemState.Insulated)
-						RestoreInsulation(transfer, tracked);
-					else
-						SimMessages.ModifyElementChunkTemperatureAdjuster(transfer.SimHandle, 0f, 0f, 0f);
-					break;
+				capacity += sample.heatCapacity;
+				energy += sample.heatCapacity * sample.temperature;
+				float weight = sample.heatCapacity * sample.fraction;
+				coupling += weight;
+				coupledEnergy += weight * sample.temperature;
 			}
+			float mean = energy / capacity;
+			float interior;
+			if (mean > setpoint)
+			{
+				// Compressor on: the contents blended with the fridge's own mass held at the
+				// setpoint. Always between the setpoint and the mean, so it only ever cools.
+				interior = (BaseHeatCapacity * setpoint + energy) / (BaseHeatCapacity + capacity);
+			}
+			else
+			{
+				// Compressor off: this weighting makes the heat the warm items lose exactly the
+				// heat the cold items gain this step.
+				interior = coupledEnergy / coupling;
+			}
+			foreach (Sample sample in samples)
+			{
+				float target = sample.temperature + (interior - sample.temperature) * sample.fraction;
+				if (Mathf.Abs(target - sample.temperature) >= MinimumStep && target > 1f)
+					sample.element.Temperature = target;
+			}
+		}
+
+		private static void Insulate(SimTemperatureTransfer transfer, Tracked tracked)
+		{
+			tracked.surfaceArea = transfer.SurfaceArea;
+			tracked.groundTransferScale = transfer.GroundTransferScale;
+			tracked.insulated = true;
+			transfer.SurfaceArea = tracked.surfaceArea * InsulationFactor;
+			transfer.GroundTransferScale = tracked.groundTransferScale * InsulationFactor;
+			Reregister(transfer);
 		}
 
 		private static void RestoreInsulation(SimTemperatureTransfer transfer, Tracked tracked)
 		{
-			if (transfer == null || !tracked.originalsSaved)
+			if (transfer == null || !tracked.insulated)
 				return;
 			transfer.SurfaceArea = tracked.surfaceArea;
 			transfer.GroundTransferScale = tracked.groundTransferScale;
-			tracked.originalsSaved = false;
+			tracked.insulated = false;
 			Reregister(transfer);
 		}
 
@@ -170,23 +225,8 @@ namespace FridgesOnlyCool
 				return;
 			if (storage != null && storage.items.Contains(item))
 				return;
-			if (tracked.originalsSaved)
-				RestoreInsulation(item.GetComponent<SimTemperatureTransfer>(), tracked);
+			RestoreInsulation(item.GetComponent<SimTemperatureTransfer>(), tracked);
 			items.Remove(item.GetInstanceID());
-		}
-
-		/// <summary>Called by the registration prefix so the periodic pass agrees with what vanilla just did.</summary>
-		public void NoteRegistered(GameObject item, bool reservoirAttached)
-		{
-			if (item == null)
-				return;
-			int id = item.GetInstanceID();
-			if (!items.TryGetValue(id, out Tracked tracked))
-				items[id] = tracked = new Tracked();
-			if (reservoirAttached)
-				tracked.state = ItemState.Cooling;
-			else if (tracked.state == ItemState.Cooling)
-				tracked.state = ItemState.Normal;
 		}
 	}
 }

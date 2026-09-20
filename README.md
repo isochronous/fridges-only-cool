@@ -1,6 +1,6 @@
 # Fridges Only Cool
 
-An [Oxygen Not Included](https://www.klei.com/games/oxygen-not-included) mod that makes a powered fridge **only ever cool** its contents. Food already colder than the fridge's 1 °C target is insulated from the room instead of being warmed up to it.
+An [Oxygen Not Included](https://www.klei.com/games/oxygen-not-included) mod that makes a powered fridge behave like an insulated box with a thermostat: it **only ever cools**, its contents share heat with each other, and food already colder than the 1 °C target is never warmed up to it.
 
 ## The problem
 
@@ -8,15 +8,17 @@ A powered Refrigerator or Mini Fridge does not set its contents to 1 °C; it att
 
 ## What the mod does
 
-While a fridge is powered, each stored item is treated one of two ways:
+A powered fridge is modelled as an insulated box with a thermostat, instead of a 1 °C reservoir glued to every item. Once a second:
 
-- **Warmer than 1 °C:** the vanilla reservoir is attached and the item is cooled to 1 °C, exactly as before.
-- **At or below 1 °C:** no reservoir. Instead the item's heat exchange with the room is scaled down by the same factor an Insulated Tile uses (1/100), so it still drifts toward room temperature, just about a hundred times slower. This is insulation in the Insulated Tile sense, not the Insulite sense: the exchange is slowed, not stopped.
+- **The contents share heat, in both directions.** Every item moves toward one interior temperature worked out from everything in the fridge, so frozen stock chills a warm newcomer fast, and is warmed a little in return. Put 5 kg of 30 °C food into 95 kg at -20 °C and it all settles at -17.5 °C: the heat is conserved, not deleted.
+- **The compressor only ever cools.** While the contents' average is above 1 °C, the fridge's own thermal mass (worth about 25 kg of food, held at 1 °C) is blended into that interior temperature and pulls it down. At or below 1 °C the compressor is off and nothing pulls the food *up*: deep-frozen food stays deep-frozen however often you power the fridge.
+- **Thermal buffer matters.** A single warm item in an otherwise empty or cold fridge is chilled about as fast as in vanilla. A fridge crammed with warm food (after a long power cut, say) cools at roughly a fifth of the vanilla rate, because a small compressor is working against a big warm mass.
+- **Cold contents are insulated from the room.** Items at or below 1 °C have their heat exchange with the room scaled down by the factor an Insulated Tile uses (1/100): slowed, not stopped (that would be Insulite). If the room eventually warms them past 1 °C the compressor cools them again.
 
-Once a second the fridge re-checks its contents and moves items between the two states. An insulated item the room eventually warms above 1 °C gets the reservoir and is cooled back down; a cooled item that reaches 1 °C becomes insulated. Unpowered fridges and items taken out of a fridge get their normal heat exchange back immediately.
+Unpowered fridges, and items taken out of a fridge, behave exactly as in vanilla.
 
 - Applies to the Refrigerator, the Mini Fridge, and any modded building that reuses the vanilla fridge controller.
-- Nothing else changes: power draw, cooling and energy-saver states, storage, the full signal (which still requires power, as in vanilla), and spoilage rules are all untouched. The insulation is not saved with the game; it is re-applied on load. Safe to add to or remove from an existing save.
+- Nothing else changes: power draw, the cooling and energy-saver states (still decided by vanilla from the items' temperatures), storage, the full signal (which still requires power, as in vanilla), and spoilage rules are all untouched. Nothing is saved with the game. Safe to add to or remove from an existing save.
 
 ## Installing
 
@@ -41,5 +43,7 @@ A successful build deploys the mod to `Documents\Klei\OxygenNotIncluded\mods\loc
 
 ## Implementation notes
 
-- `SimulatedTemperatureAdjuster.OnItemSimRegistered` (vanilla) attaches the reservoir whenever an item is registered with the sim: fridge powers up, item delivered, item spawned, chunk re-registered. A Harmony prefix sends a zeroed adjuster instead for items at or below the target. It only acts when the adjuster's storage carries the mod's `FridgeThermostat`, so other users of the class are untouched.
-- `FridgeThermostat` (added to every prefab with a `RefrigeratorController.Def` after buildings are generated) evaluates each stored item every second. Insulation is applied by scaling the item's `SimTemperatureTransfer` surface area and ground-transfer scale and re-registering its sim chunk (the component's own `SimUnregister`/`SimRegister`, which sync the temperature across the swap). Originals are restored, with another re-registration, when the item warms past the target, the fridge loses power, the item leaves the fridge, or the fridge is removed.
+- A Harmony prefix on `SimulatedTemperatureAdjuster.OnItemSimRegistered` keeps the vanilla reservoir off every item stored in a building that has a `FridgeThermostat`; other users of the adjuster are left alone.
+- `FridgeThermostat` (added to every prefab with a `RefrigeratorController.Def` after buildings are generated) runs the model in `Sim1000ms`. Each item closes the fraction `1 - exp(-k·dt / C)` of its gap to the interior temperature, with `k` = the def's `simulatedThermalConductivity` read as W/K (1 kDTU/s/K) and `C` = mass × specific heat. Compressor on: interior = (C_base·1 °C + Σ C·T) / (C_base + Σ C), which always lies between 1 °C and the contents' mean. Compressor off: interior = Σ C·f·T / Σ C·f, the weighting that makes the step conserve energy exactly. Temperatures are written through `PrimaryElement.Temperature`, which forwards to the sim chunk; steps under 0.0005 K are skipped, so a fridge at rest sends nothing.
+- Insulation is applied by scaling the item's `SimTemperatureTransfer.SurfaceArea` and `GroundTransferScale` by 0.01 and re-registering its sim chunk (protected `SimUnregister`/`SimRegister`, which sync the temperature first), with a small hysteresis band (on at 1.1 °C, off at 1.6 °C) so items do not flip every second. Originals are restored when the fridge loses power, the item leaves, or the fridge is removed.
+- Tuning lives in two constants in `FridgeThermostat`: `BaseHeatCapacity` (compressor strength) and `InsulationFactor`.

@@ -7,15 +7,14 @@ namespace FridgesOnlyCool
 	public static class Patches
 	{
 		/// <summary>
-		/// Vanilla attaches the fridge's simulated reservoir to an item whenever it is
-		/// registered with the sim (fridge powered up, item delivered, item spawned). Skip
-		/// the attachment for items already at or below the target temperature; the
-		/// FridgeThermostat picks them up later if the room warms them.
+		/// Vanilla attaches the fridge's simulated 1 °C reservoir to an item whenever it is
+		/// registered with the sim (fridge powered up, item delivered, item spawned). A fridge
+		/// with a FridgeThermostat runs its own thermal model instead, so its items never get
+		/// the reservoir.
 		/// </summary>
 		[HarmonyPatch(typeof(SimulatedTemperatureAdjuster), "OnItemSimRegistered")]
 		public static class SimulatedTemperatureAdjuster_OnItemSimRegistered_Patch
 		{
-			private static readonly FieldInfo TemperatureField = AccessTools.Field(typeof(SimulatedTemperatureAdjuster), "temperature");
 			private static readonly FieldInfo ActiveField = AccessTools.Field(typeof(SimulatedTemperatureAdjuster), "active");
 			private static readonly FieldInfo StorageField = AccessTools.Field(typeof(SimulatedTemperatureAdjuster), "storage");
 
@@ -26,14 +25,8 @@ namespace FridgesOnlyCool
 				if (!(ActiveField.GetValue(__instance) is bool active) || !active)
 					return true; // inactive: vanilla sends zeros, which is what we want
 				Storage storage = StorageField.GetValue(__instance) as Storage;
-				FridgeThermostat thermostat = storage != null ? storage.GetComponent<FridgeThermostat>() : null;
-				if (thermostat == null)
+				if (storage == null || storage.GetComponent<FridgeThermostat>() == null)
 					return true; // not a fridge (some other user of the adjuster): leave vanilla alone
-				float target = (float)TemperatureField.GetValue(__instance);
-				bool wanted = FridgeThermostat.WantsCooling(stt.GetComponent<PrimaryElement>(), target);
-				thermostat.NoteRegistered(stt.gameObject, wanted);
-				if (wanted)
-					return true;
 				SimMessages.ModifyElementChunkTemperatureAdjuster(stt.SimHandle, 0f, 0f, 0f);
 				return false;
 			}
