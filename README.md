@@ -8,7 +8,7 @@ A powered Refrigerator or Mini Fridge does not set its contents to 1 °C; it att
 
 ## What the mod does
 
-A powered fridge is modelled as an insulated box with a thermostat, instead of a 1 °C reservoir glued to every item. Once a second:
+Everything here applies **only while the fridge is powered**; an unpowered fridge is exactly vanilla (its contents exchange heat with the room at the normal rate). With power, the fridge is modelled as an insulated box with a thermostat, instead of a 1 °C reservoir glued to every item. Once a second:
 
 - **The contents share heat, in both directions.** Every item moves toward one interior temperature worked out from everything in the fridge, so frozen stock chills a warm newcomer fast, and is warmed a little in return. Put 5 kg of 30 °C food into 95 kg at -20 °C and it all settles at -17.5 °C: the heat is conserved, not deleted.
 - **The compressor only ever cools.** While the contents' average is above 1 °C, the fridge's own thermal mass (worth about 25 kg of food, held at 1 °C) is blended into that interior temperature and pulls it down. At or below 1 °C the compressor is off and nothing pulls the food *up*: deep-frozen food stays deep-frozen however often you power the fridge.
